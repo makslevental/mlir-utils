@@ -1,11 +1,14 @@
 from . import arith
 from ...util import get_user_code_loc
 from ....dialects import linalg
+from ....dialects._linalg_enum_gen import _iteratortypeenum
 
 # noinspection PyUnresolvedReferences
 from ....dialects.linalg import *
 from ....extras import types as T
-from .... import ir
+from ...meta import region_op
+from ....ir import Context, register_attribute_builder, ArrayAttr, RankedTensorType
+from ....dialects._ods_common import get_default_loc_context
 
 
 def abs(I, O, *, loc=None, ip=None):
@@ -321,7 +324,7 @@ def matmul(A, B, C, *, loc=None, ip=None):
         loc = get_user_code_loc()
 
     op_configs = linalg.LinalgOpConfig.from_linalg_op_def(
-        _matmul_generic.op_def, context=ir.Context.current
+        _matmul_generic.op_def, context=Context.current
     )
     op_config = op_configs[0]
     (
@@ -524,3 +527,47 @@ def vecmat(y, A, x, *, loc=None, ip=None):
     if loc is None:
         loc = get_user_code_loc()
     return linalg.vecmat(y, A, loc=loc, ip=ip, outs=[x])
+
+
+@register_attribute_builder("IteratorTypeArrayAttr")
+def _IteratorTypeArrayAttr(x, context):
+    return ArrayAttr.get([_iteratortypeenum(v, context) for v in x])
+
+
+class GenericOp(GenericOp):
+    def __init__(
+        self,
+        inputs,
+        outputs,
+        indexing_maps,
+        iterator_types,
+        *,
+        doc=None,
+        library_call=None,
+        loc=None,
+        ip=None,
+    ):
+        if loc is None:
+            loc = get_user_code_loc()
+        result_types = []
+        if isinstance(outputs[0].type, RankedTensorType):
+            result_types = [o.type for o in outputs]
+
+        super().__init__(
+            result_types,
+            inputs,
+            outputs,
+            indexing_maps,
+            iterator_types,
+            doc=doc,
+            library_call=library_call,
+            loc=loc,
+            ip=ip,
+        )
+        element_types = [i.type.element_type for i in inputs] + [
+            o.type.element_type for o in outputs
+        ]
+        self.regions[0].blocks.append(*element_types)
+
+
+generic = region_op(GenericOp, terminator=YieldOp)

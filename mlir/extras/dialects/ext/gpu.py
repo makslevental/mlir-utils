@@ -6,9 +6,7 @@ from typing import Any, List, Optional, Tuple, Union
 from .arith import constant
 from .func import FuncBase
 from ... import types as T
-from ...meta import (
-    region_op,
-)
+from ...meta import region_op
 from ...util import (
     ModuleMeta,
     _get_previous_frame_idents,
